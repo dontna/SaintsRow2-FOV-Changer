@@ -137,10 +137,8 @@ Once you've made all of your changes, you can exit the script by typing `exit` o
 
 The next time you load into the game, the FOV will be changed!
 
-# Limitations
-During my testing of manually editing the 'common.vpp_pc' file, I figured out you can set FOV values to anything between 1 and 180. Here's a [YouTube video](https://www.youtube.com/watch?v=SAWWRo4ZQD4) of me playing with my General FOV set to 175.
-
-The only problem is, I could never replicate this in a Python script, so all values cap at 99. This still should be more than enough room for most people, but until I can figure out how to automate this we are stuck at two digit numbers.
+# Update
+The script can now handle three-digit FOV values, meaning you can set your FOV to anything between 1 and 999. Realistically the "limit" is 180, because after that your FOV can become unstable and glitchy; but feel free to use any values you want.
 
 # Forking my work
-You are free to take this script and make it your own, maybe you'll be able to implement the three-digit FOV values before I can!
+You are free to take this script and make it your own.
