@@ -2,12 +2,15 @@ import configparser
 import os
 import sys
 
-def read_bytes_from_file(filepath, offset):
+def read_bytes_from_file(filepath, offset, len_of_bytes=2):
     # open the file
     with open(filepath, 'rb') as f:
         # read the bytes at offset, from beginning of file.
         f.seek(offset)
-        file_bytes = f.read(2)
+        file_bytes = f.read(len_of_bytes)
+
+    if file_bytes[-1:].decode() == "<" or file_bytes[-1:].decode() == ".":
+        file_bytes = file_bytes[:-1]
 
     # return the bytes
     return file_bytes
@@ -20,6 +23,94 @@ def write_bytes_to_file(filepath, offset, bytes_to_write):
         f.write(bytes(bytes_to_write, 'utf-8'))
     
     return True
+
+def replace_bytes_at_offset(filepath, offset, new_bytes):
+    # get rest of file starting from our offset
+    with open(filepath, 'rb') as f:
+        f.seek(offset)
+        content = f.read()
+
+    num_bytes_to_replace = 3
+    temp_bytes = content[:num_bytes_to_replace]
+
+    # check that we aren't overwriting any bytes we don't want to
+    if temp_bytes[-1:].decode() == "<" or temp_bytes[-1:].decode() == ".":
+        num_bytes_to_replace -= 1
+
+    new_content = content[num_bytes_to_replace:]
+    new_content = new_bytes.encode() + new_content
+
+    # write changes to file
+    with open(filepath, 'r+b') as f:
+        f.seek(offset)
+        f.write(new_content)
+        f.truncate()
+
+    return True
+
+def add_bytes_at_offset(filepath, offset, new_bytes):
+    with open(filepath, 'rb') as f:
+        f.seek(offset + 1)
+        content = f.read()
+
+    new_content = new_bytes + content
+
+    with open(filepath, 'r+b') as f:
+        f.seek(offset + 1)
+        f.write(new_content)
+        f.truncate()
+
+    return True
+
+def remove_number_of_bytes_at_offset(filepath, offset, num_to_remove=1, byte_check=None):
+    with open(filepath, 'rb') as f:
+        f.seek(offset)
+        content = f.read()
+
+    # check the content at the bytes is what we think it is [optional]
+    if byte_check != None and content[:1] != byte_check:
+        return False
+
+    new_content = content[num_to_remove:]
+
+    with open(filepath, 'r+b') as f:
+        f.seek(offset)
+        f.write(new_content)
+        f.truncate()
+
+    return True
+
+def set_byte_status(filepath, offset, new_bytes):
+    old_bytes = read_bytes_from_file(filepath, offset, 3)
+
+    if old_bytes[-1:].decode() == "<":
+        old_bytes = old_bytes[:-1]
+
+    old_bytes_len = len(old_bytes)
+    new_bytes_len = len(new_bytes)
+
+    if new_bytes_len > old_bytes_len:
+        return 1
+    elif new_bytes_len < old_bytes_len:
+        return 2
+    else:
+        return 0
+
+def handle_byte_status(filepath, offset, byte_status):
+    if byte_status == 1:
+        return remove_number_of_bytes_at_offset(filepath, offset - 16, 1, b'\r')
+    elif byte_status == 2:
+        return add_bytes_at_offset(filepath, offset - 16, b'\r')
+    else:
+        return True
+
+def calculate_correct_offset(filepath, offset):
+    old_bytes = read_bytes_from_file(filepath, offset - 1, 3)
+
+    if old_bytes[:1].decode() == ">":
+        return offset
+    else:
+        return offset - 1
 
 def set_command_handler(filepath, options, commands_help, choice):
     choice_args = choice.split(" ")
@@ -56,20 +147,32 @@ def set_command_handler(filepath, options, commands_help, choice):
         return False
     
     # force the new fov value to be within the range, if needed.
-    if int(choice_args[2]) > 99:
-        choice_args[2] = "99"
-        print("Warning: The value", choice_args[2], "is greater than 99! Setting it to 99...")
+    if int(choice_args[2]) > 999:
+        choice_args[2] = "180"
+        print("Warning: The value", choice_args[2], "is greater than 999! Setting it to 180...")
     elif int(choice_args[2]) < 1:
         choice_args[2] = "01"
         print("Warning: The value", choice_args[2], "is less than 1 Setting it to 1...")
+    elif int(choice_args[2]) > 180:
+        print("Warning: The value", choice_args[2], "is greater than 180\nGoing above 180 causes the FOV to flip or freak out, which can cause some people to feel motion sick, please do this at your own risk.")
+
+    if int(choice_args[2]) < 10 and int(choice_args) != 1:
+        choice_args[2] = f"0{choice_args[2]}"
     
     if choice_args[2].isnumeric():
         choice_args[2] = str(choice_args[2])
 
-    # write new value to file
     key = list(options.keys())[int(choice_args[1])]
-    write_bytes_to_file(filepath, options[key]['offset'], choice_args[2])
+
+    # handle byte addition/removal
+    offset = calculate_correct_offset(filepath, options[key]['offset'])
+    byte_status = set_byte_status(filepath, offset, choice_args[2])
     
+    # write new value to file
+    replace_bytes_at_offset(filepath, offset, choice_args[2])
+
+    handle_byte_status(filepath, offset, byte_status)
+
     print("Sucessfully set", key, "to", choice_args[2])
     return True
     
@@ -104,7 +207,8 @@ def get_command_handler(filepath, options, commands_help, choice):
         return False
     
     key = list(options.keys())[int(choice_args[1])]
-    our_bytes = read_bytes_from_file(filepath, options[key]['offset'])
+    offset = calculate_correct_offset(filepath, options[key]['offset'])
+    our_bytes = read_bytes_from_file(filepath, offset, 3)
     print(key, "value is", our_bytes.decode('utf-8'))
     return True
 
@@ -142,10 +246,9 @@ def info_command_handler(filepath, options, commands_help, choice):
     print(key, options[key]['description'], sep=" --> ")
     return True
 
-def reset_command_handler(filepath, options):
-    for key in options.keys():
-        write_bytes_to_file(filepath, options[key]['offset'], options[key]['default_value'])
-        print("Set", key, "to", options[key]['default_value'])
+def reset_command_handler(filepath, options, commands_help):
+    for i, key in enumerate(options.keys()):
+        set_command_handler(filepath, options, commands_help, f"set {i} {options[key]['default_value']}")
 
     print("Successfully reset all FOV values to their default!")
     return True
@@ -175,26 +278,12 @@ def gset_command_handler(filepath, options, commands_help, choice):
         return False
 
     # calculate and set fov multiplier
-    for key in options.keys():
+    for i, key in enumerate(options.keys()):
         default_value = int(options[key]['default_value'])
         fov_value_int = round(default_value * float(choice_args[1]))
-        fov_value = ""
-
-        if fov_value_int > 99:
-            print("Warning: The value", fov_value_int, "is greater than 99! Setting it to 99...")
-            fov_value_int = 99
-        elif fov_value_int <= 0:
-            print("Warning: The value", fov_value_int, "is less than 1! Setting it to 1...")
-            fov_value_int = 1
-
-        if fov_value_int < 10:
-            fov_value = f"0{fov_value_int}"
-        else:
-            fov_value = str(fov_value_int)
-
-        write_bytes_to_file(filepath, options[key]['offset'], fov_value)
-        print("Set", key, "to", fov_value)
-
+        
+        set_command_handler(filepath, options, commands_help, f"set {i} {fov_value_int}")
+        
     print("Sucessfully modified all values!")
     return True
 
@@ -321,10 +410,12 @@ def main_menu(filepath):
             get_command_handler(filepath, options, commands_help, choice) 
         elif choice.lower().startswith("gset"):
             gset_command_handler(filepath, options, commands_help, choice)
+        elif choice.lower().startswith("load"):
+            load_command_handler(filepath, options, commands_help)
         elif choice.lower().startswith("info"):
             info_command_handler(filepath, options, commands_help, choice)
         elif choice.lower() == "reset":
-            reset_command_handler(filepath, options)
+            reset_command_handler(filepath, options, commands_help)
         elif choice.lower() == "help":
             for command in commands_help.keys():
                 print(command)
