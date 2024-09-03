@@ -4,6 +4,10 @@ A Python script that allows you to set a custom FOV in Saints Row 2 PC
 # Update
 The script can now handle three-digit FOV values, meaning you can set your FOV to anything between 1 and 999. Realistically the "limit" is 180, because after that your FOV can become unstable and glitchy; but feel free to use any values you want.
 
+Here's a photo of me in game, using 160 FOV
+![Screenshot_2024-09-03_16-33-41](https://github.com/user-attachments/assets/c23c992b-0315-4e33-9ebc-5a14a61ac34b)
+
+
 # What does it do?
 The script modifies the 'custom.vpp_pc' file to allow you to set a custom [Field Of View](https://en.wikipedia.org/wiki/Field_of_view_in_video_games) or FOV for short. This is usually useful for people who play on resolutions not natively supported by the game such as 3440x1440, however anyone can get use from this.
 
